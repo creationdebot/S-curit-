@@ -285,10 +285,10 @@ async function handleDmCommands(message, cmd, args) {
 
     const embed = new EmbedBuilder()
       .setColor(0x5865f2)
-      .setTitle('📢 Recevoir les annonces en MP')
+      .setTitle('la verif stp bg')
       .setDescription(
-        `Appuie sur le bouton pour obtenir le rôle ${role} et recevoir les annonces du serveur en message privé.\n` +
-        'Appuie à nouveau pour le retirer quand tu veux.'
+        `Appuie sur le bouton pour etre verif ${role} \n` +
+        'est oui il faut te verif.'
       );
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('dm_toggle').setLabel('Recevoir / ne plus recevoir').setStyle(ButtonStyle.Primary)
