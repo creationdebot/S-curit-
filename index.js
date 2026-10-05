@@ -327,7 +327,7 @@ async function handleDmCommands(message, cmd, args) {
     .setAuthor({ name: guild.name, iconURL: guild.iconURL() || undefined })
     .setTitle('📢 Annonce')
     .setDescription(text)
-    .setFooter({ text: `Tu reçois ce message car tu as pris le rôle ${role.name}mes /lanewkeh en statu stp bg});
+    .setFooter({ text: `Tu reçois ce message car tu as pris le rôle ${role.name}. mes /lanewkeh en statu stp bg });
 
   let sent = 0;
   let failed = 0;
