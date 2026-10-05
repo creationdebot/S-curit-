@@ -2,11 +2,14 @@
 // Commandes (propriétaire du serveur + whitelist) :
 //   &secur on | off | check
 //   &secur wl add|remove @personne|ID   &secur wl list
+//   &add @role              -> définit le rôle des volontaires + poste le bouton pour le prendre
+//   &dm @role ton message   -> envoie un MP aux volontaires (membres ayant ce rôle)
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const {
   Client, GatewayIntentBits, AuditLogEvent, EmbedBuilder, PermissionFlagsBits,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags,
 } = require('discord.js');
 
 const PREFIX = process.env.PREFIX || '&';
@@ -32,7 +35,7 @@ if (fs.existsSync(CONFIG_PATH)) {
 }
 function getCfg(guildId) {
   const c = cache[guildId] || {};
-  return { enabled: !!c.enabled, whitelist: c.whitelist || [] };
+  return { enabled: !!c.enabled, whitelist: c.whitelist || [], dmRoleId: c.dmRoleId || null };
 }
 function setCfg(guildId, cfg) {
   cache[guildId] = cfg;
@@ -255,15 +258,143 @@ client.on('guildUpdate', async (oldG, newG) => {
   await derank(newG, entry.executorId, reason);
 });
 
+// ---------- MP aux volontaires (opt-in) ----------
+const dmRunning = new Set();
+const DM_DELAY = 2000; // 2 s entre chaque MP pour éviter le spam
+
+async function handleDmCommands(message, cmd, args) {
+  const guild = message.guild;
+  const cfg = getCfg(guild.id);
+
+  const allowed = message.author.id === guild.ownerId || cfg.whitelist.includes(message.author.id);
+  if (!allowed) {
+    return message.reply('❌ Seuls le propriétaire du serveur et les personnes whitelistées peuvent utiliser cette commande.');
+  }
+
+  // &add @role : définit le rôle volontaire + poste le bouton
+  if (cmd === 'add') {
+    const role = message.mentions.roles.first() || guild.roles.cache.get(args[0]);
+    if (!role) return message.reply(`Utilisation : \`${PREFIX}add @role\``);
+    if (role.id === guild.id || role.managed) return message.reply('❌ Ce rôle ne peut pas être utilisé.');
+    if (role.position >= guild.members.me.roles.highest.position) {
+      return message.reply('⚠️ Le rôle du bot doit être **au-dessus** de ce rôle dans la liste des rôles.');
+    }
+
+    cfg.dmRoleId = role.id;
+    setCfg(guild.id, cfg);
+
+    const embed = new EmbedBuilder()
+      .setColor(0x5865f2)
+      .setTitle('📢 Recevoir les annonces en MP')
+      .setDescription(
+        `Appuie sur le bouton pour obtenir le rôle ${role} et recevoir les annonces du serveur en message privé.\n` +
+        'Appuie à nouveau pour le retirer quand tu veux.'
+      );
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('dm_toggle').setLabel('Recevoir / ne plus recevoir').setStyle(ButtonStyle.Primary)
+    );
+    await message.channel.send({ embeds: [embed], components: [row] });
+    await message.delete().catch(() => {});
+    return;
+  }
+
+  // &dm @role message
+  const role = message.mentions.roles.first();
+  if (!role) return message.reply(`Utilisation : \`${PREFIX}dm @role ton message\``);
+
+  if (!cfg.dmRoleId) {
+    return message.reply(`❌ Configure d'abord le rôle des volontaires avec \`${PREFIX}add @role\`.`);
+  }
+  if (role.id !== cfg.dmRoleId) {
+    return message.reply(`❌ Tu peux envoyer des MP **uniquement** au rôle des volontaires : <@&${cfg.dmRoleId}>.`);
+  }
+
+  const text = message.content.slice(PREFIX.length + 'dm'.length).replace(/<@&\d+>/, '').trim();
+  if (!text) return message.reply(`Utilisation : \`${PREFIX}dm @role ton message\``);
+  if (text.length > 1800) return message.reply('❌ Message trop long (1800 caractères maximum).');
+  if (dmRunning.has(guild.id)) return message.reply('⏳ Un envoi est déjà en cours.');
+
+  await guild.members.fetch().catch(() => {});
+  const targets = role.members.filter((m) => !m.user.bot);
+  if (targets.size === 0) return message.reply("Personne n'a ce rôle pour le moment.");
+
+  dmRunning.add(guild.id);
+  const minutes = Math.max(1, Math.ceil((targets.size * DM_DELAY) / 60000));
+  const status = await message.reply(`📨 Envoi à **${targets.size}** membre(s)... (environ ${minutes} min)`);
+
+  const embed = new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setAuthor({ name: guild.name, iconURL: guild.iconURL() || undefined })
+    .setTitle('📢 Annonce')
+    .setDescription(text)
+    .setFooter({ text: `Tu reçois ce message car tu as pris le rôle ${role.name}. Retire-le sur le serveur pour ne plus en recevoir.` });
+
+  let sent = 0;
+  let failed = 0;
+  let tooFast = 0;
+  let aborted = false;
+
+  try {
+    for (const [, member] of targets) {
+      try {
+        await member.send({ embeds: [embed] });
+        sent++;
+        tooFast = 0;
+      } catch (e) {
+        failed++; // MP fermés ou bloqués
+        if (e.code === 40003) { // Discord trouve qu'on envoie trop vite
+          tooFast++;
+          if (tooFast >= 3) { aborted = true; break; }
+          await sleep(30000);
+        }
+      }
+      await sleep(DM_DELAY);
+    }
+  } finally {
+    dmRunning.delete(guild.id);
+  }
+
+  const result =
+    `${aborted ? '⚠️ Envoi **arrêté** (Discord limite les MP). ' : '✅ Envoi terminé. '}` +
+    `Reçus : **${sent}** · Échecs (MP fermés) : **${failed}**`;
+  await status.edit(result).catch(() => message.channel.send(result).catch(() => {}));
+}
+
+// Bouton : prendre / retirer le rôle volontaire
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isButton() || interaction.customId !== 'dm_toggle') return;
+
+  const cfg = getCfg(interaction.guild.id);
+  const role = cfg.dmRoleId && interaction.guild.roles.cache.get(cfg.dmRoleId);
+  if (!role) {
+    return interaction.reply({ content: "❌ Ce système n'est plus configuré.", flags: MessageFlags.Ephemeral });
+  }
+
+  try {
+    if (interaction.member.roles.cache.has(role.id)) {
+      await interaction.member.roles.remove(role);
+      return interaction.reply({ content: '🔕 Tu ne recevras plus les annonces en MP.', flags: MessageFlags.Ephemeral });
+    }
+    await interaction.member.roles.add(role);
+    return interaction.reply({ content: '🔔 Tu recevras désormais les annonces en MP.', flags: MessageFlags.Ephemeral });
+  } catch (e) {
+    console.error(e);
+    return interaction.reply({ content: '❌ Impossible de modifier ton rôle pour le moment.', flags: MessageFlags.Ephemeral });
+  }
+});
+
 // ---------- Commandes ----------
 client.on('messageCreate', async (message) => {
   if (!message.guild || message.author.bot) return;
 
   await checkEveryone(message);
 
-  if (!message.content.toLowerCase().startsWith(`${PREFIX}secur`)) return;
+  if (!message.content.startsWith(PREFIX)) return;
   const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
-  args.shift(); // retire "secur"
+  const cmd = args.shift()?.toLowerCase();
+
+  if (cmd === 'add' || cmd === 'dm') return handleDmCommands(message, cmd, args);
+  if (cmd !== 'secur') return;
 
   const guild = message.guild;
   const cfg = getCfg(guild.id);
@@ -352,7 +483,9 @@ client.on('messageCreate', async (message) => {
       `\`${PREFIX}secur on\` / \`${PREFIX}secur off\`\n` +
       `\`${PREFIX}secur wl add|remove @personne\`\n` +
       `\`${PREFIX}secur wl list\`\n` +
-      `\`${PREFIX}secur check\` (diagnostic)`
+      `\`${PREFIX}secur check\` (diagnostic)\n\n` +
+      `\`${PREFIX}add @role\` : rôle des volontaires pour les MP\n` +
+      `\`${PREFIX}dm @role message\` : envoyer un MP aux volontaires`
     )
     .setFooter({ text: `Whitelist : ${cfg.whitelist.length} personne(s)` });
   return message.reply({ embeds: [embed] });
