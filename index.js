@@ -285,13 +285,13 @@ async function handleDmCommands(message, cmd, args) {
 
     const embed = new EmbedBuilder()
       .setColor(0x5865f2)
-      .setTitle('la verif stp bg')
+      .setTitle('📢 Recevoir les annonces en MP')
       .setDescription(
-        `Appuie sur le bouton pour etre verif ${role} \n` +
-        'est oui il faut te verif.'
+        `Appuie t verif wlh ${role} et tu peux parler avec nous.\n` +
+        'profite bg.'
       );
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('dm_toggle').setLabel('appuie wlh t verif').setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId('dm_toggle').setLabel('Recevoir /lanewkeh en statu').setStyle(ButtonStyle.Primary)
     );
     await message.channel.send({ embeds: [embed], components: [row] });
     await message.delete().catch(() => {});
@@ -327,7 +327,7 @@ async function handleDmCommands(message, cmd, args) {
     .setAuthor({ name: guild.name, iconURL: guild.iconURL() || undefined })
     .setTitle('📢 Annonce')
     .setDescription(text)
-    .setFooter({ text: `Tu reçois ce message car tu as pris le rôle ${role.name}. mes /lanewkeh en statu stp bg });
+    .setFooter({ text: `Tu reçois ce message car tu as pris le rôle ${role.name}. mes /lanewkeh en statu bg.` });
 
   let sent = 0;
   let failed = 0;
