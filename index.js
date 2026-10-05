@@ -291,7 +291,7 @@ async function handleDmCommands(message, cmd, args) {
         'est oui il faut te verif.'
       );
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('dm_toggle').setLabel('Recevoir / ne plus recevoir').setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId('dm_toggle').setLabel('appuie wlh t verif').setStyle(ButtonStyle.Primary)
     );
     await message.channel.send({ embeds: [embed], components: [row] });
     await message.delete().catch(() => {});
