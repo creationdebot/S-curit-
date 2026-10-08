@@ -24,6 +24,7 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildModeration,
+    GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
   ],
@@ -495,5 +496,8 @@ client.on('messageCreate', async (message) => {
 
 // ---------- Logs stylisés (&adlogs, &addbotlogs) ----------
 require('./commande/logs')(client);
+
+// ---------- Vocal (&pv, &mv) ----------
+require('./commande/voc')(client);
 
 client.login(process.env.SECUR_TOKEN);
