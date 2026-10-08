@@ -8,7 +8,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const {
-  Client, GatewayIntentBits, AuditLogEvent, EmbedBuilder, PermissionFlagsBits,
+  Client, GatewayIntentBits, Partials, AuditLogEvent, EmbedBuilder, PermissionFlagsBits,
   ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags,
 } = require('discord.js');
 
@@ -23,9 +23,11 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildModeration,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
   ],
+  partials: [Partials.GuildMember, Partials.User],
 });
 
 // ---------- Config ----------
@@ -490,5 +492,8 @@ client.on('messageCreate', async (message) => {
     .setFooter({ text: `Whitelist : ${cfg.whitelist.length} personne(s)` });
   return message.reply({ embeds: [embed] });
 });
+
+// ---------- Logs stylisés (&adlogs, &addbotlogs) ----------
+require('./logs')(client);
 
 client.login(process.env.SECUR_TOKEN);
