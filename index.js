@@ -494,6 +494,6 @@ client.on('messageCreate', async (message) => {
 });
 
 // ---------- Logs stylisés (&adlogs, &addbotlogs) ----------
-require('./logs')(client);
+require('./commande/logs')(client);
 
 client.login(process.env.SECUR_TOKEN);
